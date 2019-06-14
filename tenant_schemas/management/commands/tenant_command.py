@@ -1,11 +1,11 @@
+import logging
 import argparse
 from django.core.management.base import BaseCommand, CommandError
 from django.core.management import call_command, get_commands, load_command_class
 from django.db import connection
 from tenant_schemas.management.commands import InteractiveTenantOption
 
-import logging
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 class Command(InteractiveTenantOption, BaseCommand):

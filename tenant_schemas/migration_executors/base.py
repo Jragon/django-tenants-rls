@@ -7,24 +7,24 @@ from django.core.management.commands.migrate import Command as MigrateCommand
 from django.db import transaction
 from tenant_schemas.utils import get_public_schema_name
 
+logger = logging.getLogger(__name__)
+
 
 class MigrationExecutor(object):
     codename = None
-    LOGGER_NAME = 'migration'
 
     def __init__(self, args, options):
         self.args = args
         self.options = options
-        self.logger = self.get_or_create_logger()
 
     def run_migrations(self, tenants):
         public_schema_name = get_public_schema_name()
         if public_schema_name in tenants:
-            self.logger.info("Started migration for public tenant")
+            logger.info("Started migration for public tenant")
             self.run_migration(public_schema_name)
             tenants.pop(tenants.index(public_schema_name))
         if tenants:
-            self.logger.info("Started migrations for {} private tenants".format(len(tenants)))
+            logger.info("Started migrations for {} private tenants".format(len(tenants)))
             self.run_tenant_migrations(tenants)
 
     def run_migration(self, schema_name, allow_atomic=True):
@@ -54,7 +54,7 @@ class MigrationExecutor(object):
         try:
             MigrateCommand(stdout=stdout, stderr=stderr).execute(*self.args, **self.options)
         except Exception as e:
-            self.logger.error('Migration fails for tenant {}. Error: {}'.format(schema_name, str(e)))
+            logger.error('Migration fails for tenant {}. Error: {}'.format(schema_name, str(e)))
             raise
 
         try:
@@ -72,20 +72,3 @@ class MigrationExecutor(object):
 
     def run_tenant_migrations(self, tenant):
         raise NotImplementedError
-
-    @classmethod
-    def get_or_create_logger(cls):
-        """
-        Return logger for migration executor.
-        Configure logger handlers if they are not already configured
-        """
-        logger = logging.getLogger(cls.LOGGER_NAME)
-        if len(logger.handlers) == 0:
-            logger_path = getattr(settings, 'TENANT_MIGRATION_LOGGER_PATH', '')
-            hdlr = logging.FileHandler(os.path.join(logger_path, '{}.log'.format(cls.LOGGER_NAME)))
-            formatter = logging.Formatter('[%(asctime)s][%(levelname)s] %(message)s')
-            hdlr.setFormatter(formatter)
-            logger.addHandler(hdlr)
-            logger.setLevel(logging.INFO)
-
-        return logger
