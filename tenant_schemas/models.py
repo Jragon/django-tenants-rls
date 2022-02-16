@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.core import checks
-from django.db import connection, models
+from django.db import connection, models, transaction
 
 from .fields import RLSForeignKey, generate_rls_fk_field
 from .utils import get_tenant_model
@@ -10,9 +10,13 @@ from .signals import post_schema_sync
 def get_tenant():
     tenant = connection.tenant
     if tenant is None:
-        raise Exception("No tenant configured in db connection, connection.tenant is none")
+        raise Exception(
+            "No tenant configured in db connection, connection.tenant is none"
+        )
     model = get_tenant_model()
-    return tenant if isinstance(tenant, model) else model(schema_name=tenant.schema_name)
+    return (
+        tenant if isinstance(tenant, model) else model(schema_name=tenant.schema_name)
+    )
 
 
 class TenantQueryset(models.QuerySet):
@@ -78,7 +82,7 @@ class MultitenantMixin(models.Model):
     @classmethod
     def _get_tenant_field(cls):
         all_fields = cls._meta.get_fields()
-        tenant_fields = [field for field in all_fields if field.name == 'tenant']
+        tenant_fields = [field for field in all_fields if field.name == "tenant"]
         tenant_field = tenant_fields[0] if tenant_fields else None
         return tenant_field
 
@@ -93,7 +97,7 @@ class MultitenantMixin(models.Model):
                 checks.Critical(
                     f"tenant field not present in {object_name}",
                     obj=cls,
-                    id=f'tenant_schemas.{object_name}.tenant_field.C001'
+                    id=f"tenant_schemas.{object_name}.tenant_field.C001",
                 )
             ]
         # Ensure that tenant field is instance of RLSForeignKey.
@@ -102,7 +106,7 @@ class MultitenantMixin(models.Model):
                 checks.WARNING(
                     f"tenant field isn't instance of {RLSForeignKey.__name__} in {object_name}",
                     obj=cls,
-                    id=f'tenant_schemas.{object_name}.tenant_field.W001'
+                    id=f"tenant_schemas.{object_name}.tenant_field.W001",
                 )
             ]
 
@@ -115,31 +119,40 @@ class MultitenantMixin(models.Model):
         warnings = list()
 
         # Ensure that m2m field related model has tenant field and is an instance of RLSForeignKey
-        m2m_fields = (field for field in all_fields if isinstance(field, models.ManyToManyField))
+        m2m_fields = (
+            field for field in all_fields if isinstance(field, models.ManyToManyField)
+        )
         for m2m_field in m2m_fields:
             through_all_fields = m2m_field.remote_field.through._meta.get_fields()
-            through_tenant_fields = [field for field in through_all_fields if field.name == 'tenant']
-            through_tenant_field = through_tenant_fields[0] if through_tenant_fields else None
+            through_tenant_fields = [
+                field for field in through_all_fields if field.name == "tenant"
+            ]
+            through_tenant_field = (
+                through_tenant_fields[0] if through_tenant_fields else None
+            )
             through_object_name = m2m_field.remote_field.through._meta.object_name
 
-            auto_or_manual_model = 'auto-created' if m2m_field.remote_field.through._meta.auto_created else 'manual'
+            auto_or_manual_model = (
+                "auto-created"
+                if m2m_field.remote_field.through._meta.auto_created
+                else "manual"
+            )
 
             if not through_tenant_field:
                 warnings.append(
                     checks.Warning(
                         f"tenant field not present in Many2Many {auto_or_manual_model} model: {through_object_name}",
                         hint=f"Use custom defined model for through property in Many2Many field "
-                             f"{cls._meta.object_name}.{m2m_field.name} using {MultitenantMixin.__name__} "
-                             f"in the model definition",
-                        id=f'tenant_schemas.{through_object_name}.m2m_field.W001'
+                        f"{cls._meta.object_name}.{m2m_field.name} using {MultitenantMixin.__name__} "
+                        f"in the model definition",
+                        id=f"tenant_schemas.{through_object_name}.m2m_field.W001",
                     )
                 )
             elif not isinstance(through_tenant_field, RLSForeignKey):
                 warnings.append(
                     checks.Warning(
                         f"tenant field isn't instance of RLSForeignKey in {through_object_name}",
-                        id=f'tenant_schemas.{through_object_name}.m2m_field.W002'
-
+                        id=f"tenant_schemas.{through_object_name}.m2m_field.W002",
                     )
                 )
 
@@ -157,9 +170,44 @@ class MultitenantMixin(models.Model):
                     warnings.append(
                         checks.Warning(
                             f"tenant field isn't in unique_together in {object_name}: {unique_together}",
-                            id=f'tenant_schemas.{object_name}.unique_together_without_tenant.W001'
-
+                            id=f"tenant_schemas.{object_name}.unique_together_without_tenant.W001",
                         )
                     )
 
         return warnings
+
+
+class DomainMixin(models.Model):
+    """
+    All models that store the domains must inherit this class
+    """
+
+    domain = models.CharField(max_length=253, unique=True, db_index=True)
+    tenant = models.ForeignKey(
+        settings.TENANT_MODEL,
+        db_index=True,
+        related_name="domains",
+        on_delete=models.CASCADE,
+    )
+
+    # Set this to true if this is the primary domain
+    is_primary = models.BooleanField(default=True, db_index=True)
+
+    @transaction.atomic
+    def save(self, *args, **kwargs):
+        # Get all other primary domains with the same tenant
+        domain_list = self.__class__.objects.filter(
+            tenant=self.tenant, is_primary=True
+        ).exclude(pk=self.pk)
+        # If we have no primary domain yet, set as primary domain by default
+        self.is_primary = self.is_primary or (not domain_list.exists())
+        if self.is_primary:
+            # Remove primary status of existing domains for tenant
+            domain_list.update(is_primary=False)
+        super().save(*args, **kwargs)
+
+    class Meta:
+        abstract = True
+
+    def __str__(self):
+        return self.domain

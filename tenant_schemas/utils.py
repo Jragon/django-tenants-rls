@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+import os
 
 from django.db import connection
 from django.conf import settings
@@ -37,6 +38,9 @@ def tenant_context(tenant):
 def get_tenant_model():
     return get_model(*settings.TENANT_MODEL.split("."))
 
+
+def get_tenant_domain_model():
+    return get_model(settings.TENANT_DOMAIN_MODEL)
 
 def get_tenant_field():
     return 'schema_name'
