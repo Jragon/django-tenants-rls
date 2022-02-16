@@ -12,7 +12,7 @@ class RLSDatabaseSchemaEditor(DatabaseSchemaEditor):
     sql_drop_policy = (
         "DROP POLICY IF EXISTS _po_tenant_%(table)s ON %(table)s"
     )
-    sql_alter_column_defaul_tenant = (
+    sql_alter_column_default_tenant = (
         "ALTER TABLE ONLY %(table)s ALTER COLUMN tenant_id SET DEFAULT get_current_tenant();"
     )
     main_rls_policy = (
@@ -57,7 +57,7 @@ class RLSDatabaseSchemaEditor(DatabaseSchemaEditor):
                 "table": model._meta.db_table,
                 "policy": self.main_rls_policy
             })
-            self.execute(self.sql_alter_column_defaul_tenant % {"table": self.quote_name(model._meta.db_table)})
+            self.execute(self.sql_alter_column_default_tenant % {"table": self.quote_name(model._meta.db_table)})
 
     def _unset_tenant_rls(self, disable_rls, model):
         if disable_rls:
