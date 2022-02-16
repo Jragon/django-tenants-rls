@@ -32,8 +32,8 @@ class TenantSchemaConfig(AppConfig):
         tenant_apps_set = set(settings.TENANT_APPS)
 
         for app in self.apps.all_models.keys():
-            app_config = self.apps.app_configs[app]
-            if app_config.name in tenant_apps_set:
+            app_config = self.apps.app_configs.get(app)
+            if app_config is not None and app_config.name in tenant_apps_set:
                 for model_name, model in app_config.models.items():
                     if not issubclass(model, MultitenantMixin):
                         # tenant field name is also hardcoded in tenant_schemas.models.MultitenantMixin
