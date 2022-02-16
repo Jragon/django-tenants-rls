@@ -8,7 +8,7 @@ class RLSForeignKey(models.ForeignKey):
     rls_required = True
 
 
-def generate_rls_fk_field():
+def generate_rls_fk_field(related_name="+"):
     """
     This method generate the rls foreign key relation field and it aims to unify this definition in a single point
     """
@@ -18,5 +18,6 @@ def generate_rls_fk_field():
         to_field=get_tenant_field(),
         blank=True,
         default=get_tenant,
-        on_delete=models.PROTECT
+        on_delete=models.PROTECT,
+        related_name=related_name
     )
