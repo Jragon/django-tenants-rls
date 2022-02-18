@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core import checks
 from django.db import connection, models, transaction
+from django.db.models.fields.related import RelatedField
 
 from .fields import RLSForeignKey, generate_rls_fk_field
 from .utils import get_tenant_model
@@ -183,15 +184,22 @@ class MultitenantMixin(models.Model):
 
         for field in cls._meta.get_fields():
             object_name = cls._meta.object_name
-            if getattr(field, 'unique', False) and not getattr(field, 'primary_key', False):
+            if (
+                # related fields can be unique (ie 1-1 field is unique on pkeys so no worries)
+                not isinstance(field, RelatedField)
+                # pkeys are unique anyway
+                and not getattr(field, "primary_key", False)
+                and getattr(field, "unique", False)
+            ):
                 warnings.append(
                     checks.Warning(
                         f"Field {field.name} marked as unique in {object_name}. Must use unique together with the tenant_id.",
                         id=f"tenant_schemas.{object_name}.unique.W001",
                     )
                 )
-        
+
         return warnings
+
 
 class DomainMixin(models.Model):
     """
