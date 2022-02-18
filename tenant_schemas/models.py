@@ -77,6 +77,7 @@ class MultitenantMixin(models.Model):
         errors.extend(cls._run_check_tenant_field())
         errors.extend(cls._run_check_m2m_fields())
         errors.extend(cls._run_check_unique_together())
+        errors.extend(cls._run_check_uniques())
         return errors
 
     @classmethod
@@ -176,6 +177,21 @@ class MultitenantMixin(models.Model):
 
         return warnings
 
+    @classmethod
+    def _run_check_uniques(cls):
+        warnings = list()
+
+        for field in cls._meta.get_fields():
+            object_name = cls._meta.object_name
+            if getattr(field, 'unique', False) and not getattr(field, 'primary_key', False):
+                warnings.append(
+                    checks.Warning(
+                        f"Field {field.name} marked as unique in {object_name}. Must use unique together with the tenant_id.",
+                        id=f"tenant_schemas.{object_name}.unique.W001",
+                    )
+                )
+        
+        return warnings
 
 class DomainMixin(models.Model):
     """
