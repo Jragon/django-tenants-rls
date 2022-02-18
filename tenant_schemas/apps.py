@@ -35,7 +35,7 @@ class TenantSchemaConfig(AppConfig):
             app_config = self.apps.app_configs.get(app)
             if app_config is not None and app_config.name in tenant_apps_set:
                 for model_name, model in app_config.models.items():
-                    if not issubclass(model, MultitenantMixin):
+                    if not issubclass(model, MultitenantMixin) and "Historical" not in model.__name__:
                         # tenant field name is also hardcoded in tenant_schemas.models.MultitenantMixin
                         model.add_to_class('tenant', generate_rls_fk_field())
 
