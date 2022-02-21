@@ -118,18 +118,24 @@ def best_practice(app_configs, **kwargs):
 @register('rest_framework.serializers')
 def check_serializers(app_configs, **kwargs):
     import inspect
-    from rest_framework.serializers import ModelSerializer as drf_ModelSerializer, HyperlinkedModelSerializer
-    from rest_framework_json_api.serializers import ModelSerializer as json_api_ModelSerializer
     from .models import MultitenantMixin
     from .contrib.drf.serializers import RLSModelSerializer
 
-    import config.urls  # noqa, force import of all serializers.
+    serializers = []
+    try: 
+        from rest_framework.serializers import ModelSerializer as drf_ModelSerializer, HyperlinkedModelSerializer
+        serializers.extend(drf_ModelSerializer.__subclasses__())
+        serializers.extend(HyperlinkedModelSerializer.__subclasses__())
+    except:
+        pass
 
-    for serializer in (
-        drf_ModelSerializer.__subclasses__() +
-        json_api_ModelSerializer.__subclasses__() +
-        HyperlinkedModelSerializer.__subclasses__()
-    ):
+    try:
+        from rest_framework_json_api.serializers import ModelSerializer as json_api_ModelSerializer
+        serializers.extend(json_api_ModelSerializer.__subclasses__())
+    except:
+        pass
+    
+    for serializer in serializers:
         # Skip third-party apps and serializers that have already RLSModelSerializer as base class.
         path = inspect.getfile(serializer)
         if path.find('site-packages') > -1 or issubclass(serializer, RLSModelSerializer):
